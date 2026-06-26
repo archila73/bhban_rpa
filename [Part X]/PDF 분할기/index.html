@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF 분할기</title>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .container {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+      padding: 40px;
+      width: 100%;
+      max-width: 680px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      color: #6e6e73;
+      font-size: 0.9rem;
+      margin-bottom: 32px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #3a3a3c;
+      margin-bottom: 8px;
+    }
+
+    .section { margin-bottom: 24px; }
+
+    /* 파일 드롭존 */
+    .drop-zone {
+      border: 2px dashed #c7c7cc;
+      border-radius: 12px;
+      padding: 36px 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+
+    .drop-zone.dragover {
+      border-color: #0071e3;
+      background: #f0f7ff;
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .drop-zone .icon { font-size: 2rem; margin-bottom: 8px; }
+    .drop-zone .hint { color: #6e6e73; font-size: 0.85rem; margin-top: 4px; }
+
+    /* 선택된 파일 목록 */
+    #file-list {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #f5f5f7;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.85rem;
+    }
+
+    .file-item .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-item .file-size { color: #6e6e73; font-size: 0.78rem; white-space: nowrap; }
+    .file-item .remove-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #c7c7cc;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 0 2px;
+      transition: color 0.15s;
+    }
+    .file-item .remove-btn:hover { color: #ff3b30; }
+
+    /* 숫자 입력 */
+    input[type="number"] {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #c7c7cc;
+      border-radius: 10px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="number"]:focus { border-color: #0071e3; }
+
+    .input-hint { font-size: 0.78rem; color: #6e6e73; margin-top: 6px; }
+
+    /* 실행 버튼 */
+    button#run-btn {
+      width: 100%;
+      padding: 13px;
+      background: #0071e3;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, opacity 0.2s;
+    }
+
+    button#run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    button#run-btn:not(:disabled):hover { background: #0077ed; }
+
+    /* 진행 상황 */
+    #progress-area {
+      margin-top: 28px;
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .progress-block { font-size: 0.85rem; }
+
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .progress-bar-wrap {
+      background: #f0f0f5;
+      border-radius: 999px;
+      height: 6px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: #0071e3;
+      border-radius: 999px;
+      transition: width 0.25s ease;
+      width: 0%;
+    }
+
+    /* 결과 */
+    #result-area {
+      margin-top: 28px;
+      display: none;
+    }
+
+    .result-header {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 12px;
+      color: #1d1d1f;
+    }
+
+    .result-group { margin-bottom: 20px; }
+
+    .result-group-title {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #6e6e73;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+
+    .download-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      background: #f0f7ff;
+      color: #0071e3;
+      border: 1.5px solid #cce0ff;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background 0.15s, border-color 0.15s;
+      cursor: pointer;
+    }
+
+    .download-btn:hover { background: #deeeff; border-color: #0071e3; }
+
+    .download-all-btn {
+      margin-top: 20px;
+      width: 100%;
+      padding: 11px;
+      background: #34c759;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .download-all-btn:hover { background: #30b552; }
+
+    .error-msg {
+      background: #fff5f5;
+      border: 1.5px solid #ffc9c9;
+      border-radius: 10px;
+      padding: 12px 16px;
+      color: #c0392b;
+      font-size: 0.85rem;
+      margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>PDF 분할기</h1>
+  <p class="subtitle">여러 PDF를 지정한 페이지 수 단위로 자동 분할합니다.</p>
+
+  <div class="section">
+    <label>PDF 파일 선택</label>
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="file-input" accept=".pdf" multiple />
+      <div class="icon">📄</div>
+      <div>PDF 파일을 드래그하거나 클릭해서 선택</div>
+      <div class="hint">여러 파일 동시 선택 가능</div>
+    </div>
+    <div id="file-list"></div>
+  </div>
+
+  <div class="section">
+    <label for="pages-input">분할 단위 (페이지 수)</label>
+    <input type="number" id="pages-input" min="1" value="50" placeholder="예: 50" />
+    <p class="input-hint">예) 200쪽 PDF에 50 입력 → 1~50, 51~100, 101~150, 151~200 으로 분할</p>
+  </div>
+
+  <button id="run-btn" disabled>분할 시작</button>
+
+  <div id="error-area"></div>
+
+  <div id="progress-area">
+    <!-- 파일별 진행 블록이 여기에 동적 삽입됨 -->
+  </div>
+
+  <div id="result-area">
+    <div class="result-header">✅ 분할 완료 — 아래에서 다운로드하세요</div>
+    <div id="result-list"></div>
+    <button class="download-all-btn" id="download-all-btn">전체 한꺼번에 다운로드</button>
+  </div>
+</div>
+
+<script>
+  const { PDFDocument } = PDFLib;
+
+  let selectedFiles = [];
+  // { blob, filename } 전체 결과 저장 (전체 다운로드용)
+  let allResults = [];
+
+  const fileInput   = document.getElementById('file-input');
+  const dropZone    = document.getElementById('drop-zone');
+  const fileListEl  = document.getElementById('file-list');
+  const pagesInput  = document.getElementById('pages-input');
+  const runBtn      = document.getElementById('run-btn');
+  const progressArea = document.getElementById('progress-area');
+  const resultArea  = document.getElementById('result-area');
+  const resultList  = document.getElementById('result-list');
+  const errorArea   = document.getElementById('error-area');
+  const downloadAllBtn = document.getElementById('download-all-btn');
+
+  // ── 파일 선택 ──────────────────────────────────────────
+  fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    addFiles(e.dataTransfer.files);
+  });
+
+  function addFiles(fileList) {
+    for (const f of fileList) {
+      if (f.type === 'application/pdf' && !selectedFiles.find(s => s.name === f.name && s.size === f.size)) {
+        selectedFiles.push(f);
+      }
+    }
+    renderFileList();
+    updateRunBtn();
+  }
+
+  function removeFile(index) {
+    selectedFiles.splice(index, 1);
+    renderFileList();
+    updateRunBtn();
+  }
+
+  function renderFileList() {
+    fileListEl.innerHTML = '';
+    selectedFiles.forEach((f, i) => {
+      const item = document.createElement('div');
+      item.className = 'file-item';
+      item.innerHTML = `
+        <span>📄</span>
+        <span class="file-name">${escHtml(f.name)}</span>
+        <span class="file-size">${formatSize(f.size)}</span>
+        <button class="remove-btn" data-idx="${i}" title="제거">✕</button>
+      `;
+      fileListEl.appendChild(item);
+    });
+    fileListEl.querySelectorAll('.remove-btn').forEach(btn =>
+      btn.addEventListener('click', () => removeFile(Number(btn.dataset.idx)))
+    );
+  }
+
+  function updateRunBtn() {
+    runBtn.disabled = selectedFiles.length === 0;
+  }
+
+  // ── 분할 실행 ──────────────────────────────────────────
+  runBtn.addEventListener('click', runSplit);
+
+  async function runSplit() {
+    const pagesPerChunk = parseInt(pagesInput.value, 10);
+    errorArea.innerHTML = '';
+
+    if (!pagesPerChunk || pagesPerChunk < 1) {
+      showError('분할 단위를 1 이상의 숫자로 입력해주세요.');
+      return;
+    }
+
+    runBtn.disabled = true;
+    progressArea.style.display = 'flex';
+    progressArea.innerHTML = '';
+    resultArea.style.display = 'none';
+    resultList.innerHTML = '';
+    allResults = [];
+
+    for (const file of selectedFiles) {
+      await processFile(file, pagesPerChunk);
+    }
+
+    // 결과 표시
+    resultArea.style.display = 'block';
+    runBtn.disabled = false;
+  }
+
+  async function processFile(file, pagesPerChunk) {
+    // 진행 블록 생성
+    const block = document.createElement('div');
+    block.className = 'progress-block';
+    block.innerHTML = `
+      <div class="progress-label">
+        <span>${escHtml(file.name)}</span>
+        <span class="pct-label">준비 중…</span>
+      </div>
+      <div class="progress-bar-wrap"><div class="progress-bar"></div></div>
+    `;
+    progressArea.appendChild(block);
+
+    const bar    = block.querySelector('.progress-bar');
+    const pctLbl = block.querySelector('.pct-label');
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const srcDoc = await PDFDocument.load(arrayBuffer);
+      const total  = srcDoc.getPageCount();
+      const chunks = Math.ceil(total / pagesPerChunk);
+
+      // 결과 그룹 UI
+      const group = document.createElement('div');
+      group.className = 'result-group';
+      group.innerHTML = `<div class="result-group-title">${escHtml(file.name)} (총 ${total}쪽 → ${chunks}개 파일)</div>`;
+      const grid = document.createElement('div');
+      grid.className = 'download-grid';
+      group.appendChild(grid);
+      resultList.appendChild(group);
+
+      const baseName = file.name.replace(/\.pdf$/i, '');
+
+      for (let i = 0; i < chunks; i++) {
+        const startIdx = i * pagesPerChunk;            // 0-based
+        const endIdx   = Math.min(startIdx + pagesPerChunk, total); // exclusive
+
+        const newDoc = await PDFDocument.create();
+        const indices = Array.from({ length: endIdx - startIdx }, (_, k) => startIdx + k);
+        const copied  = await newDoc.copyPagesFrom(srcDoc, indices);
+        copied.forEach(p => newDoc.addPage(p));
+
+        const pdfBytes = await newDoc.save();
+        const blob     = new Blob([pdfBytes], { type: 'application/pdf' });
+        const filename = `${baseName}_${i + 1}부(${startIdx + 1}-${endIdx}p).pdf`;
+
+        allResults.push({ blob, filename });
+
+        // 개별 다운로드 버튼
+        const url = URL.createObjectURL(blob);
+        const a   = document.createElement('a');
+        a.href     = url;
+        a.download = filename;
+        a.className = 'download-btn';
+        a.innerHTML = `⬇ ${startIdx + 1}~${endIdx}쪽`;
+        grid.appendChild(a);
+
+        // 진행률 업데이트
+        const pct = Math.round(((i + 1) / chunks) * 100);
+        bar.style.width   = pct + '%';
+        pctLbl.textContent = `${pct}%`;
+      }
+
+      pctLbl.textContent = '완료 ✓';
+      bar.style.background = '#34c759';
+
+    } catch (err) {
+      pctLbl.textContent = '오류';
+      bar.style.background = '#ff3b30';
+      bar.style.width = '100%';
+      showError(`"${file.name}" 처리 중 오류: ${err.message}`);
+    }
+  }
+
+  // ── 전체 다운로드 ──────────────────────────────────────
+  downloadAllBtn.addEventListener('click', async () => {
+    // 순서대로 순차 다운로드 (브라우저 팝업 차단 방지)
+    for (const { blob, filename } of allResults) {
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href     = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // 짧은 간격을 두어 브라우저가 다운로드를 인식하게 함
+      await new Promise(r => setTimeout(r, 150));
+    }
+  });
+
+  // ── 유틸 ───────────────────────────────────────────────
+  function showError(msg) {
+    errorArea.innerHTML = `<div class="error-msg">${escHtml(msg)}</div>`;
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function escHtml(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
